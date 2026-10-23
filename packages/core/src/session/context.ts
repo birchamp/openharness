@@ -17,6 +17,7 @@ import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
 import { AgentNotFoundError } from "./error.js"
+import { HarnessSurface } from "./harness/surface.js"
 import { SessionHistory } from "./history.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { SessionMessage } from "./message.js"
@@ -79,6 +80,7 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
+    const harness = yield* HarnessSurface.Service
     const location = yield* Location.Service
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
@@ -129,6 +131,8 @@ const layer = Layer.effect(
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
 
+      // A staged harness is read here, on select, so the next step sees it without an in-memory tool loop.
+      yield* harness.sync().pipe(Effect.catch((error) => Effect.logWarning("harness sync failed", { error })))
       yield* mcpTools.flush
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
@@ -212,6 +216,7 @@ export const node = makeLocationNode({
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
     InstructionEntry.node,
+    HarnessSurface.node,
     Location.node,
     McpInstructions.node,
     McpTool.node,
